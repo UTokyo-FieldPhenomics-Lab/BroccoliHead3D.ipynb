@@ -2,6 +2,10 @@
 
 The notebook archive for destructive broccoli analysis
 
+# 230424
+
+* Remove model noises for `6-3` origial model, but the algorithms does not work well on this special rounded shape
+* `8-24` model fail to build and missing
 
 # 230407
 
