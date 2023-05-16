@@ -118,12 +118,12 @@ if __name__ == '__main__':
         predictions4plot.convex_area /= 1000
 
         predictions4plot = predictions4plot.rename(columns={
-            'major_axis_length': 'major_axis_length\n(m)', 
-            'minor_axis_length': 'minor_axis_length\n(m)', 
-            'min_area_rect_min': 'min_area_rect_min\n(m)',
-            'min_area_rect_max': 'min_area_rect_max\n(m)', 
-            'area': 'area($1000cm^2$)', 
-            'convex_area': 'convex_area\n($1000cm^2$)',
+            'major_axis_length': 'length of\nmajor axis\n(m)', 
+            'minor_axis_length': 'length of\nminor axis\n(m)', 
+            'min_area_rect_min': 'width of\nmin. area\nrect.(m)',
+            'min_area_rect_max': 'length of\nmin. area\nrect.(m)', 
+            'area': 'area\n($1000 cm^2$)', 
+            'convex_area': 'convex area\n($1000 cm^2$)',
         })
 
         f, ax = plt.subplots(figsize=(7, 6))
@@ -131,8 +131,13 @@ if __name__ == '__main__':
         sns.boxplot(data=predictions4plot, ax=ax, palette="vlag")
         sns.stripplot(data=predictions4plot, ax=ax)
 
-        plt.xticks(rotation=-45)
+        # plt.xticks(rotation=-45)
 
+        ax.set_title(f'AutoML predicted traits of grid {grid_id} on {date}')
+        ax.set_ylabel('values')
+
+        plt.tight_layout()
+        plt.savefig(f'out/autoskl_pred_{date}_{grid_id}.svg')
         plt.show()
 
         #######################
@@ -180,16 +185,18 @@ if __name__ == '__main__':
 
         ax.text(lbmax*0.01, lbmax*0.99, 
             'Traits Units \n\n'
-            'major_axis_length (m)\n' + 
-            'minor_axis_length (m)\n' + 
-            'min_area_rect_min (m)\n' + 
-            'min_area_rect_max (m)\n'+ 
+            'length of major axis (m)\n' + 
+            'length of minor axis (m)\n' + 
+            'width of min. area rect. (m)\n' + 
+            'length of min. area rect. (m)\n'+ 
             'area ($1000cm^2$)\n' + 
-            'convex_area ($1000cm^2$)\n',
+            'convex area ($1000cm^2$)\n',
             va='top')
         ax.set_xlabel('Traits of AutoML predicted')
         ax.set_ylabel('Traits of matched broccoli template')
         ax.set_title(f'Date {date} Grid ID {grid_id}')
+        plt.tight_layout()
+        plt.savefig(f"out/autoskl_matched_{date}_{grid_id}.svg")
         plt.show()
 
         # put broccoli back to field
@@ -212,7 +219,19 @@ if __name__ == '__main__':
             matched_slice = broccoli_mesh_db.iloc[matched_idx[i]]
             mesh = o3d.io.read_triangle_mesh(mesh_db[matched_slice.Model_ID],  enable_post_processing=True)
 
-            broccoli_mesh_container.append(mesh.translate((x_pos, y_pos, z_pos)))
+            # rotate and put it back
+            r = Rotation.from_euler('z', matched_slice['orientation(degree)'], degrees=True)
+            m_trans = copy(mesh).rotate(r.as_matrix())
+
+            # scale
+            m_trans.vertices = o3d.utility.Vector3dVector(
+                np.asarray(m_trans.vertices) * np.array([trans[i][0], trans[i][1], 1]) 
+            )
+            # by testing, the x -> width, y -> length
+            # trans -> # [0]'min_rect_width(m)', [1] 'min_rect_length(m)', 
+            m_trans_back = copy(m_trans).rotate(r.inv().as_matrix())
+
+            broccoli_mesh_container.append(m_trans_back.translate((x_pos, y_pos, z_pos)))
 
         # open3d show
         grid_pcd_o3d = to_open3d(grid_pcd)
