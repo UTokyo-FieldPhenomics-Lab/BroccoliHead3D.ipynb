@@ -8,7 +8,9 @@ import pandas as pd
 import seaborn as sns
 import open3d as o3d
 
+from copy import copy
 from shapely.geometry.polygon import Polygon
+from scipy.spatial.transform import Rotation 
 
 import easyidp as idp
 
@@ -232,6 +234,9 @@ if __name__ == '__main__':
             m_trans_back = copy(m_trans).rotate(r.inv().as_matrix())
 
             broccoli_mesh_container.append(m_trans_back.translate((x_pos, y_pos, z_pos)))
+
+            # no scale
+            # broccoli_mesh_container.append(mesh.translate((x_pos, y_pos, z_pos)))
 
         # open3d show
         grid_pcd_o3d = to_open3d(grid_pcd)
