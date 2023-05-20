@@ -8,6 +8,8 @@ import pandas as pd
 import seaborn as sns
 import open3d as o3d
 
+import autosklearn as askl
+
 from copy import copy
 from shapely.geometry.polygon import Polygon
 from scipy.spatial.transform import Rotation 
@@ -44,10 +46,10 @@ if __name__ == '__main__':
     print('loading UAV 2D trait results')
     broccoli_2d_traits = pd.read_excel('./out/props_all_2022.xlsx')
 
-    print('loading AutoML prediction models')
+    # print('loading AutoML prediction models')
     # load autosklearn model
-    with open('out/autoskl_model_1.pkl', 'rb') as handle:
-        automl = pickle.load(handle)
+    # with open(f'out/autoskl_{askl.__version__}_model_{random_state}.pkl', 'rb') as handle:
+    #     automl = pickle.load(handle)
 
     # load the database
     print('loading HD 3D broccoli head database')
@@ -109,8 +111,9 @@ if __name__ == '__main__':
         X.convex_area /= 100
 
         # predict the values
-        predictions = automl.predict(X.values)
-        predictions = pd.DataFrame(columns=X.columns, data=predictions)
+        # predictions = automl.predict(X.values)
+        # predictions = pd.DataFrame(columns=X.columns, data=predictions)
+        predictions = X.copy()
 
         ## preview the distribution of predicted tratis
         sns.set_theme(style="ticks")
@@ -119,28 +122,56 @@ if __name__ == '__main__':
         predictions4plot.area /= 1000
         predictions4plot.convex_area /= 1000
 
-        predictions4plot = predictions4plot.rename(columns={
+        # raw4plot = X.copy()
+        # raw4plot.area /= 1000
+        # raw4plot.convex_area /= 1000
+
+        col_rename_dict = {
             'major_axis_length': 'length of\nmajor axis\n(m)', 
             'minor_axis_length': 'length of\nminor axis\n(m)', 
-            'min_area_rect_min': 'width of\nmin. area\nrect.(m)',
-            'min_area_rect_max': 'length of\nmin. area\nrect.(m)', 
-            'area': 'area\n($1000 cm^2$)', 
-            'convex_area': 'convex area\n($1000 cm^2$)',
-        })
+            'min_area_rect_min': 'width of\nmin. area\nrect. (m)',
+            'min_area_rect_max': 'length of\nmin. area\nrect. (m)', 
+            'area': 'area\n($10^3 \cdot cm^2$)', 
+            'convex_area': 'convex area\n($10^3 \cdot cm^2$)',
+        }
 
-        f, ax = plt.subplots(figsize=(7, 6))
+        predictions4plot = predictions4plot.rename(columns=col_rename_dict)
+        # raw4plot = raw4plot.rename(columns=col_rename_dict)
 
-        sns.boxplot(data=predictions4plot, ax=ax, palette="vlag")
-        sns.stripplot(data=predictions4plot, ax=ax)
+        f, ax = plt.subplots(figsize=(6, 6))
+        # fig, ax = plt.subplots(1,3, figsize=(19,7), dpi=300)
+
+        # pairwise aeral measured vs automl calibrated
+        # mx = max(raw4plot.max().max(), predictions4plot.max().max())
+        mx = predictions4plot.max().max()
+        mn = predictions4plot.min().min()
+        mx = np.ceil(100 * mx) / 100 * 1.05
+        mn = np.floor(100 * mn) / 100 * 0.95
+
+        # ax[0].plot([mn, mx], [mn, mx], 'k--', alpha=0.5)
+
+        # for i in raw4plot.columns:
+        #     ax[0].scatter(raw4plot[i], predictions4plot[i], label=i.replace('\n', ' '), alpha=0.5)
+
+        # ax[0].set_xlim(mn, mx)
+        # ax[0].set_ylim(mn, mx)
+        # ax[0].set_xlabel('Aerial measured values')
+        # ax[0].set_ylabel('AutoML calibrated values')
+        # ax[0].legend()
+        # ax[0].set_title('(c) Comparison between source and calibrated')
+        
+
+        # sns.boxplot(data=predictions4plot, ax=ax[1], palette="vlag")
+        # sns.stripplot(data=predictions4plot, ax=ax[1])
 
         # plt.xticks(rotation=-45)
 
-        ax.set_title(f'AutoML predicted traits of grid {grid_id} on {date}')
-        ax.set_ylabel('values')
+        # ax[1].set_title(f'(b) Distribution of each AutoML calibrated traits')
+        # ax[1].set_ylabel('values')
 
-        plt.tight_layout()
-        plt.savefig(f'out/autoskl_pred_{date}_{grid_id}.svg')
-        plt.show()
+        # plt.tight_layout()
+        # plt.savefig(f'out/autoskl_pred_{date}_{grid_id}.svg')
+        # plt.show()
 
         #######################
         # find the closest db #
@@ -155,14 +186,25 @@ if __name__ == '__main__':
             'crown_2dconvex_area(cm2)', 'projected_leaf_area(cm2)']]
 
         # preview the match results
-        fig, ax = plt.subplots(1,1, figsize=(8,8))
-
         trans = []
         matched_idx = []
 
-        lbmax = np.ceil( 0.01 * matching_sort.values.max()) / 10
+        # lbmax = np.ceil( 0.01 * matching_sort.values.max()) / 10
+        lbmax = mx
+        lbmin = mn
 
-        ax.plot([0, lbmax], [0, lbmax], 'k--', alpha=0.5)
+        color = plt.cm.get_cmap('plasma', len(predictions))
+        marker=['o', 'x', '^', 'v', '+', 's']
+        labels = [
+            'length of major axis (m)',
+            'length of minor axis (m)',
+            'width of min. area rect. (m)',
+            'length of min. area rect. (m)', 
+            'area ($10^3 \cdot cm^2$)',
+            'convex area ($10^3 \cdot cm^2$)'
+        ]
+
+        ax.plot([lbmin, lbmax], [lbmin, lbmax], 'k--', alpha=0.5)
 
         for row_id, v in predictions.iterrows():
             diff = matching_sort.values - v.values
@@ -176,30 +218,41 @@ if __name__ == '__main__':
             db_v = matching_sort.values[min_diff_idx,:]
 
             plot_ratio = np.array([1, 1, 1, 1, 0.001, 0.001])
-            ax.scatter(x=pred_v*plot_ratio, y=db_v*plot_ratio, alpha=0.5)
+            xx = pred_v*plot_ratio
+            yy = db_v*plot_ratio
+            for i in range(len(xx)):
+                if row_id == 0:
+                    ax.scatter(x=xx[i], y=yy[i], alpha=0.5, marker=marker[i], color=color(row_id), label=labels[i])
+                else:
+                    ax.scatter(x=xx[i], y=yy[i], alpha=0.5, marker=marker[i], color=color(row_id))
 
             # [2]'min_rect_width(m)', [3] 'min_rect_length(m)', 
             trans.append((pred_v[2]/db_v[2], pred_v[3]/db_v[3]))
             matched_idx.append(min_diff_idx)
             
-        ax.set_xlim(0, lbmax)
-        ax.set_ylim(0, lbmax)
+        ax.set_xlim(lbmin, lbmax)
+        ax.set_ylim(lbmin, lbmax)
 
-        ax.text(lbmax*0.01, lbmax*0.99, 
-            'Traits Units \n\n'
-            'length of major axis (m)\n' + 
-            'length of minor axis (m)\n' + 
-            'width of min. area rect. (m)\n' + 
-            'length of min. area rect. (m)\n'+ 
-            'area ($1000cm^2$)\n' + 
-            'convex area ($1000cm^2$)\n',
-            va='top')
-        ax.set_xlabel('Traits of AutoML predicted')
-        ax.set_ylabel('Traits of matched broccoli template')
-        ax.set_title(f'Date {date} Grid ID {grid_id}')
+        # ax[2].text(lbmax*0.01, lbmax*0.99, 
+        # ax.text(lbmin*1.01, lbmax*0.99, 
+        #     'Traits Units \n\n'
+        #     'length of major axis (m)\n' + 
+        #     'length of minor axis (m)\n' + 
+        #     'width of min. area rect. (m)\n' + 
+        #     'length of min. area rect. (m)\n'+ 
+        #     'area ($10^3 \cdot cm^2$)\n' + 
+        #     'convex area ($10^3 \cdot cm^2$)\n',
+        #     va='top')
+        ax.set_xlabel('Values of aerial measured')
+        ax.set_ylabel('Values of matched broccoli template')
+        ax.set_title(f'Tempalte matched broccoli from database (grid {grid_id} on {date})')
+
+        # plt.suptitle(f'Results of grid {grid_id} on {date}')
         plt.tight_layout()
-        plt.savefig(f"out/autoskl_matched_{date}_{grid_id}.svg")
+        plt.savefig(f"out/aerial_matched_{date}_{grid_id}.pdf")
         plt.show()
+
+        # continue
 
         # put broccoli back to field
         broccoli_mesh_container = []
@@ -240,4 +293,6 @@ if __name__ == '__main__':
 
         # open3d show
         grid_pcd_o3d = to_open3d(grid_pcd)
+
+        o3d.visualization.draw_geometries([grid_pcd_o3d])
         o3d.visualization.draw_geometries([grid_pcd_o3d] + broccoli_mesh_container)
