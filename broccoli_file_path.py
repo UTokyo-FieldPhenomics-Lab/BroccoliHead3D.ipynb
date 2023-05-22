@@ -4,6 +4,8 @@
 project_data_folder = "/mnt/z/hwang_Pro/data/2022_tanashi_broccoli"
 working_spacename = "12_head_segment"
 
+random_state = 1
+train_size = 0.8
 
 ###################
 # 01 prepare data #
